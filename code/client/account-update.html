@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Ipsum Street Music Shop</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="update your account" />
+    <link rel="stylesheet" href="/assets/css/normalize.css" />
+    <link rel="stylesheet" href="/assets/css/index.css" />
+    <link rel="stylesheet" href="/assets/css/lessons.css" />
+    <!-- TODO: Integrate Stripe -->
+    <script src="/assets/js/common.js" defer></script>
+    <script src="/assets/js/account-update.js" defer></script>
+  </head>
+  <body>
+    <div>
+      <div class="logo">
+        <img src="/assets/img/logo_only.svg" alt="Ipsum Music Store" />
+      </div>
+      <ul class="eco-navigation">
+        <li><a href="/" >Home</a></li>
+        <li><a href="/lessons" class="current">Lessons Courses</a></li>
+      </ul>
+      <div class="logo-title">
+        <img src="/assets/img/logo_name.svg" alt="Ipsum Music Store" />
+      </div>
+  </div>
+    <div class="sr-body">
+      <div class="sr-context">
+        <div class="sr-title">
+          <h2>Account details</h2>
+        </div>
+        <div class="eco-items" id="account-information">
+          <h4>Current Account Information</h4>
+          <h5>We have the following card information on file for you:</h5>
+          <p class="eco-banner-text">
+            <strong>Billing Email:&nbsp;&nbsp;</strong><span id="billing-email"></span><br />
+            <strong>Card Exp Month:&nbsp;&nbsp;</strong><span id="card-exp-month"></span><br />
+            <strong>Card Exp Year:&nbsp;&nbsp;</strong><span id="card-exp-year"></span><br />
+            <strong>Card last 4:&nbsp;&nbsp;</strong><span id="card-last4"></span><br />
+          </p>
+        </div>
+      </div>
+      <div class="sr-form-container">
+       <form id="lesson-form-wrapper">
+        <div class="lesson-form">
+          <div class="sr-payment-form payment-view">
+            <h3>Update your Payment details</h3>
+            <p>
+              Fill out the form below if you'd like to us to use a new card.
+            </p>
+            <div class="sr-form-row">
+              <div class="sr-combo-inputs">
+                <div id="customer-name" class="sr-combo-inputs-row">
+                  <lable>Name</lable>
+                  <input
+                    type="text"
+                    id="name"
+                    placeholder="Name"
+                    autocomplete="cardholder"
+                    class="sr-input"
+                  />
+                </div>
+                <div id="customer-email" class="sr-combo-inputs-row">
+                  <lable>Email</lable>
+                  <input
+                    type="text"
+                    id="email"
+                    placeholder="Email"
+                    autocomplete="cardholder"
+                  />
+                </div>
+                <div id="customer-readonly" class="sr-combo-inputs-row hidden"></div>
+                <div class="sr-combo-inputs-row lesson-payment-element">
+                  <!-- TODO: Use this div for your card element -->
+                  <!--Stripe.js injects the Payment Element-->
+                  <div id="payment-element"></div>
+                </div>
+              </div>
+              <div class="sr-field-error" id="card-errors" role="alert"></div>
+              <div
+                class="sr-field-error"
+                id="customer-exists-error"
+                role="alert"
+                hidden
+              >
+                <span id="customer-exists-message"></span>
+              </div>
+            </div>
+            <button id="checkout-btn" name="checkout-btn">
+              <div class="spinner hidden" id="spinner"></div>
+              <span id="button-text">Update Payment Method</span>
+            </button>
+            <button id="submit" name="confirm-btn" class="hidden">
+              <div class="spinner hidden" id="spinner"></div>
+              <span id="button-text">Update Payment Method</span>
+            </button>
+            <div class="sr-legal-text">
+              Your card will not be charged. By registering, you hold a session
+              slot which we will confirm within 24 hrs.
+            </div>
+          </div>
+
+          <div class="lesson-complete hidden completed-view">
+            <h5 id="signup-status">Payment Information updated</h5>
+            <button onclick="window.location.href='/lessons'">
+              Sign up for lessons under a different email address
+            </button>
+          </div>
+        </div>
+        <!-- end of main -->
+       </form>
+      </div>
+    </div>
+  </body>
+</html>

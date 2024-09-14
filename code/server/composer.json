@@ -1,0 +1,26 @@
+{
+  "autoload": {
+    "psr-4": {
+        "App\\": "src/"
+    }
+  },
+  "require": {
+    "vlucas/phpdotenv": "^3.4",
+    "monolog/monolog": "^1.17",
+    "slim/slim": "4.10",
+    "slim/psr7": "^1.5",
+    "php-di/php-di": "^6.1.2", 
+    "php-di/slim-bridge": "^3.2",
+    "slim/http": "^1.2",
+    "stripe/stripe-php": "^13.2.1"
+  },
+  "scripts": {
+    "start": "php -S 0.0.0.0:4242 -t ../client -q -d error_reporting='E_ALL & ~E_DEPRECATED & ~E_STRICT' -d log_errors=1 ./src/index.php"
+  },
+  "require-dev": {
+    "pds/skeleton": "^1.0"
+  },
+  "config": {
+    "process-timeout": 0
+  }
+}
