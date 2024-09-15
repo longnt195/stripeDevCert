@@ -12,6 +12,7 @@
     <!-- TODO: Integrate Stripe -->
     <script src="/assets/js/common.js" defer></script>
     <script src="/assets/js/lesson-signup.js" defer></script>
+    <script src="https://js.stripe.com/v3/"></script>
 </head>
 
 <body>
@@ -43,7 +44,7 @@
           </div>
         </div>
         <div class="sr-form-container hidden">
-            <form id="lesson-form-wrapper">
+            <form id="lesson-form-wrapper" method="post" action="/lessons">
           <div class="lesson-form">
               <div class="sr-payment-form payment-view">
                   <h3>Registration details</h3>
@@ -56,12 +57,12 @@
                       <div class="sr-combo-inputs">
                           <div id="customer-name" class="sr-combo-inputs-row">
                               <lable>Name</lable>
-                              <input type="text" id="name" placeholder="Name" autocomplete="cardholder"
+                              <input type="text" id="name" name="name" placeholder="Name" autocomplete="cardholder"
                                   class="sr-input" onchange="checkForCompleteInfo()"/>
                           </div>
                           <div id="customer-email" class="sr-combo-inputs-row">
                               <lable>Email</lable>
-                              <input type="text" id="email" placeholder="Email" autocomplete="cardholder" class="sr-input" 
+                              <input type="text" id="email" name="email" placeholder="Email" autocomplete="cardholder" class="sr-input" 
                               onchange="checkForCompleteInfo()"/>
                           </div>
                           <div id="customer-readonly" class="sr-combo-inputs-row hidden">
@@ -69,7 +70,7 @@
                           <div class="sr-combo-inputs-row lesson-payment-element">
                               <!-- TODO: use this div for your payment element -->
                               <!--Stripe.js injects the Payment Element-->
-                              <div id="payment-element"></div>
+                              <div id="payment-element" class="hidden"></div>
                           </div>
                       </div>
                       <div class="sr-field-error" id="card-errors" role="alert"></div>

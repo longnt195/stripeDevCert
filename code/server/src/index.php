@@ -7,6 +7,7 @@ use Monolog\Handler\StreamHandler;
 use Slim\Exception\HttpNotFoundException;
 
 // TODO: Integrate Stripe
+use Stripe\StripeClient;
 
 require './vendor/autoload.php';
 
@@ -75,6 +76,10 @@ $app->options('/{routes:.+}', function ($request, $response, $args) {
 //   }
 $app->get('/config', function (Request $request, Response $response, array $args) {
   // TODO: Integrate Stripe
+    $config = [
+        'key' => $_ENV['STRIPE_PUBLISHABLE_KEY'] ?? ''
+    ];
+    return $response->withJson($config);
 });
 
 $container->set('errorHandler',  function ($c) {
@@ -127,6 +132,10 @@ $app->get('/lessons', function (Request $request, Response $response, array $arg
   return static_file('/lessons.html', $response);
 });
 
+$app->get('/success', function (Request $request, Response $response, array $args) {
+    return static_file('/success.html', $response);
+});
+
 
 $app->post('/setup-intent-lesson', function (Request $request, Response $response, array $args) {
   //
@@ -134,6 +143,66 @@ $app->post('/setup-intent-lesson', function (Request $request, Response $respons
   $logger = $this->get('logger');
   $logger->info('Reached POST /setup-intent-lesson');
   // TODO: Integrate Stripe
+    $email = $request->getParam('email');
+    $lessonId = $request->getParam('lessonId') . '_lesson';
+    $stripe = new \Stripe\StripeClient($_ENV['STRIPE_SECRET_KEY']);
+    
+    $customers = $stripe->customers->all([
+        'email' => $email
+    ]);
+    if ($customers->data) {
+        return $response->withJson(['customer' => $customers->data[0]->id]);
+    }
+
+    $lessonTime = $request->getParam('lessonTime');
+    
+    $customer = $stripe->customers->create([
+        'name' => $request->getParam('name'),
+        'email' => $email,
+        'metadata' => [
+            $lessonId => $lessonTime
+        ]
+    ]);
+    $setupIntents = $stripe->setupIntents->create([
+        'customer' => $customer->id,
+        'payment_method_types' => ['card'],
+        'usage' => 'off_session'
+    ]);
+    return $response->withJson(['clientSecret' => $setupIntents->client_secret]);
+});
+
+$app->post('/lessons', function (Request $request, Response $response, array $args) {
+    $stripe = new \Stripe\StripeClient($_ENV['STRIPE_SECRET_KEY']);
+//    $checkout = $stripe->checkout->sessions->create([
+//        'mode' => 'setup',
+//        'payment_method_types' => ['card'],
+//        'success_url' => 'http://localhost:4242/success?sessionId={CHECKOUT_SESSION_ID}',
+//        'cancel_url' => 'http://localhost:4242/cancel',
+//        'customer_email' => $request->getParam('email'),
+//        'expand' => ['setup_intent'],
+//    ]);
+    
+    $paymentMethod = $stripe->paymentMethods->retrieve(
+        $request->getParam('payment_method')
+    );
+    
+    $customer = $stripe->customers->retrieve($paymentMethod->customer);
+
+    $stripe->paymentMethods->update(
+        $request->getParam('payment_method'),
+        ['billing_details' => [
+            'name' => $customer->name,
+            'email' => $customer->email
+        ]]
+    );
+    
+    $result = [
+        'customer' => $paymentMethod->customer, 
+        'last4' => $paymentMethod->card->last4
+    ];
+    
+    $response->withStatus(303);
+    return $response->withJson($result);
 });
 
 $app->get('/payment-method-details/{paymentId}', function (Request $request, Response $response, array $args) {
