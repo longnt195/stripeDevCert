@@ -243,6 +243,36 @@ $app->get('/payment-method-details/{paymentId}', function (Request $request, Res
  */
 $app->post('/schedule-lesson', function (Request $request, Response $response, array $args) {
   // TODO: Integrate Stripe
+    $stripe = new \Stripe\StripeClient(getenv('STRIPE_SECRET_KEY'));
+    try {
+        $paymentMethods = $stripe->customers->allPaymentMethods($request->getParam('customer_id'), ['type' => 'card', 'limit' => 1]);
+        if ($paymentMethods->data) {
+            $paymentMethod = $paymentMethods->data[0]->id;
+        }
+        $paymentIntent = $stripe->paymentIntents->create([
+            'customer' => $request->getParam('customer_id'),
+            'amount' => $request->getParam('amount'),
+            'currency' => 'usd',
+            'payment_method' => $paymentMethod ?? '',
+            'description' => $request->getParam('description'),
+            'payment_method_types' => ['card'],
+            'capture_method' => 'manual',
+            'confirmation_method' => 'manual',
+            'confirm' => true,
+            'metadata' => ['type' => 'lessons-payment'],
+        ]);
+
+        $result = ['payment' => $paymentIntent];
+    } catch (\Stripe\Exception\InvalidRequestException $e) {
+        $result = [
+            'error' => [
+                'code' => $e->getStripeCode(),
+                'message' => $e->getMessage()
+            ]
+        ];
+    }
+    
+    return $response->withJson($result);
 });
 
 
@@ -274,6 +304,24 @@ $app->post('/schedule-lesson', function (Request $request, Response $response, a
  */
 $app->post('/complete-lesson-payment', function (Request $request, Response $response, array $args) {
   // TODO: Integrate Stripe
+    $stripe = new \Stripe\StripeClient(getenv('STRIPE_SECRET_KEY'));
+    try {
+        $paymentIntent = $stripe->paymentIntents->retrieve($request->getParam('payment_intent_id'), []);
+        $capture = $stripe->paymentIntents->capture($paymentIntent->id, [
+            'amount_to_capture' => $request->getParam('amount')
+        ]);
+
+        $result = ['payment' => $capture];
+    } catch (\Stripe\Exception\InvalidRequestException $e) {
+        $result = [
+            'error' => [
+                'code' => $e->getStripeCode(),
+                'message' => $e->getMessage()
+            ]
+        ];
+    }
+
+    return $response->withJson($result);
 });
 
 
@@ -308,6 +356,43 @@ $app->post('/complete-lesson-payment', function (Request $request, Response $res
  */
 $app->post('/refund-lesson', function (Request $request, Response $response, array $args) {
   // TODO: Integrate Stripe
+    $stripe = new \Stripe\StripeClient(getenv('STRIPE_SECRET_KEY'));
+    try {
+        $paymentIntent = $stripe->paymentIntents->retrieve($request->getParam('payment_intent_id'), []);
+        $refundParams = [
+            'charge' => $paymentIntent->latest_charge
+        ];
+        if ($paymentIntent->amount != $request->getParam('amount')) {
+            $refundParams['amount'] = $request->getParam('amount');
+        }
+        $refund = $stripe->refunds->create($refundParams);
+
+        $result = ['refund' => $refund->id];
+    } catch (\Stripe\Exception\InvalidRequestException $e) {
+        $result = [
+            'error' => [
+                'code' => $e->getStripeCode(),
+                'message' => $e->getMessage()
+            ]
+        ];
+    }
+
+    return $response->withJson($result);
+});
+
+$app->get('/refunds/{refundId}', function (Request $request, Response $response, array $args) {
+    $stripe = new \Stripe\StripeClient(getenv('STRIPE_SECRET_KEY'));
+    try {
+        $result = $stripe->refunds->retrieve($args['refundId'], []);
+    } catch (\Stripe\Exception\InvalidRequestException $e) {
+        $result = [
+            'error' => [
+                'code' => $e->getStripeCode(),
+                'message' => $e->getMessage()
+            ]
+        ];
+    }
+    return $response->withJson($result);
 });
 
 /**
