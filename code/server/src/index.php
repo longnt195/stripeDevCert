@@ -145,7 +145,7 @@ $app->post('/setup-intent-lesson', function (Request $request, Response $respons
   // TODO: Integrate Stripe
     $email = $request->getParam('email');
     $lessonId = $request->getParam('lessonId') . '_lesson';
-    $stripe = new \Stripe\StripeClient($_ENV['STRIPE_SECRET_KEY']);
+    $stripe = new \Stripe\StripeClient(getenv('STRIPE_SECRET_KEY'));
     
     $customers = $stripe->customers->all([
         'email' => $email
@@ -172,7 +172,7 @@ $app->post('/setup-intent-lesson', function (Request $request, Response $respons
 });
 
 $app->post('/lessons', function (Request $request, Response $response, array $args) {
-    $stripe = new \Stripe\StripeClient($_ENV['STRIPE_SECRET_KEY']);
+    $stripe = new \Stripe\StripeClient(getenv('STRIPE_SECRET_KEY'));
 //    $checkout = $stripe->checkout->sessions->create([
 //        'mode' => 'setup',
 //        'payment_method_types' => ['card'],
