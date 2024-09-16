@@ -77,7 +77,7 @@ $app->options('/{routes:.+}', function ($request, $response, $args) {
 $app->get('/config', function (Request $request, Response $response, array $args) {
   // TODO: Integrate Stripe
     $config = [
-        'key' => $_ENV['STRIPE_PUBLISHABLE_KEY'] ?? ''
+        'key' => getenv('STRIPE_PUBLISHABLE_KEY'),
     ];
     return $response->withJson($config);
 });
