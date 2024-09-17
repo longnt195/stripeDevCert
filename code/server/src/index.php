@@ -5,6 +5,7 @@ use Psr\Http\Message\ServerRequestInterface as Request;
 use Slim\Factory\AppFactory;
 use Monolog\Handler\StreamHandler;
 use Slim\Exception\HttpNotFoundException;
+use Slim\Views\Twig;
 
 // TODO: Integrate Stripe
 use Stripe\StripeClient;
@@ -362,8 +363,9 @@ $app->post('/refund-lesson', function (Request $request, Response $response, arr
         $refundParams = [
             'charge' => $paymentIntent->latest_charge
         ];
-        if ($paymentIntent->amount != $request->getParam('amount')) {
-            $refundParams['amount'] = $request->getParam('amount');
+        $requestAmount = $request->getParam('amount');
+        if ($requestAmount && $paymentIntent->amount != $requestAmount) {
+            $refundParams['amount'] = $requestAmount;
         }
         $refund = $stripe->refunds->create($refundParams);
 
@@ -403,6 +405,120 @@ $app->get('/account-update/{customer_id}', function (Request $request, Response 
   return static_file('/account-update.html', $response);
 });
 
+$app->post('/get-customer', function (Request $request, Response $response, array $args) {
+    $stripe = new \Stripe\StripeClient(getenv('STRIPE_SECRET_KEY'));
+    $result = [];
+    try {
+        $paymentMethods = $stripe->customers->allPaymentMethods($request->getParam('customer_id'), ['type' => 'card', 'limit' => 1]);
+        if ($paymentMethods->data) {
+            $paymentMethod = $paymentMethods->data[0];
+            $result = [
+                'customer' => [
+                    'name' => $paymentMethod->billing_details->name,
+                    'email' => $paymentMethod->billing_details->email,
+                ],
+                'card' => [
+                    'exp_month' => $paymentMethod->card->exp_month,
+                    'exp_year' => $paymentMethod->card->exp_year,
+                    'last4' => $paymentMethod->card->last4
+                ]
+            ];
+        }
+    } catch (\Stripe\Exception\InvalidRequestException $e) {
+        $result = [
+            'error' => [
+                'code' => $e->getStripeCode(),
+                'message' => $e->getMessage()
+            ]
+        ];
+    }
+    return $response->withJson($result);
+});
+
+$app->post('/account-update/{customer_id}', function (Request $request, Response $response, array $args) {
+    $stripe = new \Stripe\StripeClient(getenv('STRIPE_SECRET_KEY'));
+    try {
+        $name = $request->getParam('name');
+        $email = $request->getParam('email');
+        $customerId = $args['customer_id'];
+        $customers = $stripe->customers->all([
+            'email' => $email
+        ]);
+
+        if ($customers->data && $customers->data[0]->id != $customerId) {
+            return $response->withJson([
+                'error' => 'existed'
+            ]);
+        }
+
+        $stripe->customers->update(
+            $customerId,
+            [
+                'email' => $email,
+                'name' => $name,
+            ]
+        );
+
+        $paymentMethods = $stripe->customers->allPaymentMethods($customerId);
+        foreach ($paymentMethods->data as $paymentMethod) {
+            $stripe->paymentMethods->detach($paymentMethod->id, []);
+        }
+
+        $paymentMethod = $stripe->paymentMethods->attach(
+            $request->getParam('payment_method'),
+            ['customer' => $customerId]
+        );
+
+        $paymentMethod = $stripe->paymentMethods->update(
+            $paymentMethod->id,
+            [
+                'billing_details' => [
+                    'name' => $name,
+                    'email' => $email,
+                ]
+            ]
+        );
+
+        $result = [
+            'customer' => [
+                'name' => $paymentMethod->billing_details->name,
+                'email' => $paymentMethod->billing_details->email,
+            ],
+            'card' => [
+                'exp_month' => $paymentMethod->card->exp_month,
+                'exp_year' => $paymentMethod->card->exp_year,
+                'last4' => $paymentMethod->card->last4
+            ]
+        ];
+    } catch (\Stripe\Exception\InvalidRequestException $e) {
+        $result = [
+            'error' => [
+                'code' => $e->getStripeCode(),
+                'message' => $e->getMessage()
+            ]
+        ];
+    }
+    return $response->withJson($result);
+});
+
+$app->post('/setup-intent-update', function (Request $request, Response $response, array $args) {
+    $email = $request->getParam('email');
+    $customerId = $request->getParam('customer_id');
+    $stripe = new \Stripe\StripeClient(getenv('STRIPE_SECRET_KEY'));
+
+    $customers = $stripe->customers->all([
+        'email' => $email
+    ]);
+    if ($customers->data && $customers->data[0]->id != $customerId) {
+        return $response->withJson(['customer' => $customers->data[0]->id]);
+    }
+    
+    $setupIntents = $stripe->setupIntents->create([
+        'payment_method_types' => ['card'],
+        'usage' => 'off_session'
+    ]);
+    return $response->withJson(['clientSecret' => $setupIntents->client_secret]);
+});
 
 /*
  * Milestone 3: '/delete-account'
@@ -436,6 +552,31 @@ $app->get('/account-update/{customer_id}', function (Request $request, Response 
  */
 $app->post('/delete-account/{customer_id}', function (Request $request, Response $response, array $args) {
   // TODO: Integrate Stripe
+    $stripe = new \Stripe\StripeClient(getenv('STRIPE_SECRET_KEY'));
+    $result = [];
+    try {
+        $paymentIntents = $stripe->paymentIntents->all([
+            'customer' => $args['customer_id']
+        ]);
+        foreach ($paymentIntents->data as $paymentIntent) {
+            if ($paymentIntent->amount_capturable) {
+                $result['uncaptured_payments'][] = $paymentIntent->id;
+            }
+        }
+        
+        if (!isset($result['uncaptured_payments'])) {
+            $customer = $stripe->customers->delete($args['customer_id'], []);
+            $result['deleted'] = $customer->deleted;
+        }
+    } catch (\Stripe\Exception\InvalidRequestException $e) {
+        $result = [
+            'error' => [
+                'code' => $e->getStripeCode(),
+                'message' => $e->getMessage()
+            ]
+        ];
+    }
+    return $response->withJson($result);
 });
 
 /* 
