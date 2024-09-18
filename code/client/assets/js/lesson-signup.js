@@ -182,7 +182,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (customer) {
       document.getElementById("customer-exists-error").hidden = false;
       document.getElementById("account_link").innerHTML =
-          `<a href="/account-update?customer=${customer}">Account Update</a>`;
+          `<a href="/account-update/${customer}">Account Update</a>`;
       return;
     }
     const elements = stripe.elements({clientSecret, appearance});
@@ -196,29 +196,28 @@ document.addEventListener('DOMContentLoaded', async () => {
     var payment_method = '';
     async function handleSubmit(event) {
       event.preventDefault();
-      document.getElementById("spinner").classList.remove("hidden");
+      changeLoadingState(true);
       document.getElementById("submit").disabled = true;
-      if (!payment_method) {
-        const setup = await stripe.confirmSetup({
-          elements,
-          confirmParams: {
-            return_url: `${window.location.origin}/return.html`,
-          },
-          'redirect': 'if_required'
-        });
-        if (setup.error) {
-          document.getElementById('card-errors').innerHTML = setup.error.message;
-          document.getElementById("spinner").classList.add("hidden");
-          document.getElementById("submit").disabled = false;
-        } else {
-          payment_method = setup.setupIntent.payment_method;
-        }
+      const setup = await stripe.confirmSetup({
+        elements,
+        confirmParams: {
+          return_url: `${window.location.origin}/return.html`,
+        },
+        'redirect': 'if_required'
+      });
+      if (setup.error) {
+        displayError(setup.error.message);
+        document.getElementById("submit").disabled = false;
+      } else {
+        payment_method = setup.setupIntent.payment_method;
       }
 
       if (payment_method) {
         var data = new FormData(event.target);
         data.append('payment_method', payment_method);
-        const {customer, last4} = await fetch(event.target.action, {
+        data.append('lessonId', srItem.id);
+        data.append('lessonTime', lessonTime);
+        const {customer, last4, error} = await fetch(event.target.action, {
           method: form.method,
           body: data,
           headers: {
@@ -226,11 +225,23 @@ document.addEventListener('DOMContentLoaded', async () => {
           }
         }).then((r) => r.json());
 
-        form.reset();
-        form.getElementsByClassName('payment-view')[0].classList.add('hidden');
-        form.getElementsByClassName('completed-view')[0].classList.remove('hidden');
-        document.getElementById("customer-id").innerHTML = customer;
-        document.getElementById("last4").innerHTML = last4;
+        if (error === 'existed') {
+          showCustomerExistsError('Customer email already exists!');
+        }
+
+        changeLoadingState(false);
+        document.getElementById("submit").disabled = false;
+        setVisibility('payment-element', false);
+        setVisibility('submit', false);
+        setVisibility('checkout-btn', true);
+
+        if (!error) {
+          form.reset();
+          form.getElementsByClassName('payment-view')[0].classList.add('hidden');
+          form.getElementsByClassName('completed-view')[0].classList.remove('hidden');
+          document.getElementById("customer-id").innerHTML = customer;
+          document.getElementById("last4").innerHTML = last4;
+        }
       }
     }
     form.addEventListener("submit", handleSubmit);

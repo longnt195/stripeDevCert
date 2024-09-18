@@ -144,28 +144,16 @@ $app->post('/setup-intent-lesson', function (Request $request, Response $respons
   $logger = $this->get('logger');
   $logger->info('Reached POST /setup-intent-lesson');
   // TODO: Integrate Stripe
-    $email = $request->getParam('email');
-    $lessonId = $request->getParam('lessonId') . '_lesson';
     $stripe = new \Stripe\StripeClient(getenv('STRIPE_SECRET_KEY'));
-    
+
+    $email = $request->getParam('email');
     $customers = $stripe->customers->all([
         'email' => $email
     ]);
     if ($customers->data) {
         return $response->withJson(['customer' => $customers->data[0]->id]);
     }
-
-    $lessonTime = $request->getParam('lessonTime');
-    
-    $customer = $stripe->customers->create([
-        'name' => $request->getParam('name'),
-        'email' => $email,
-        'metadata' => [
-            $lessonId => $lessonTime
-        ]
-    ]);
     $setupIntents = $stripe->setupIntents->create([
-        'customer' => $customer->id,
         'payment_method_types' => ['card'],
         'usage' => 'off_session'
     ]);
@@ -174,35 +162,46 @@ $app->post('/setup-intent-lesson', function (Request $request, Response $respons
 
 $app->post('/lessons', function (Request $request, Response $response, array $args) {
     $stripe = new \Stripe\StripeClient(getenv('STRIPE_SECRET_KEY'));
-//    $checkout = $stripe->checkout->sessions->create([
-//        'mode' => 'setup',
-//        'payment_method_types' => ['card'],
-//        'success_url' => 'http://localhost:4242/success?sessionId={CHECKOUT_SESSION_ID}',
-//        'cancel_url' => 'http://localhost:4242/cancel',
-//        'customer_email' => $request->getParam('email'),
-//        'expand' => ['setup_intent'],
-//    ]);
-    
-    $paymentMethod = $stripe->paymentMethods->retrieve(
-        $request->getParam('payment_method')
-    );
-    
-    $customer = $stripe->customers->retrieve($paymentMethod->customer);
 
-    $stripe->paymentMethods->update(
+    $email = $request->getParam('email');
+    $name = $request->getParam('name');
+    $lessonId = $request->getParam('lessonId') . '_lesson';
+    $lessonTime = $request->getParam('lessonTime');
+    $customers = $stripe->customers->all([
+        'email' => $email
+    ]);
+    if ($customers->data) {
+        return $response->withJson(['error' => 'existed']);
+    }
+
+    $customer = $stripe->customers->create([
+        'name' => $name,
+        'email' => $email,
+        'metadata' => [
+            $lessonId => $lessonTime
+        ]
+    ]);
+
+    $paymentMethod = $stripe->paymentMethods->attach(
         $request->getParam('payment_method'),
-        ['billing_details' => [
-            'name' => $customer->name,
-            'email' => $customer->email
-        ]]
+        ['customer' => $customer->id]
+    );
+
+    $paymentMethod = $stripe->paymentMethods->update(
+        $paymentMethod->id,
+        [
+            'billing_details' => [
+                'name' => $name,
+                'email' => $email,
+            ]
+        ]
     );
     
     $result = [
         'customer' => $paymentMethod->customer, 
         'last4' => $paymentMethod->card->last4
     ];
-    
-    $response->withStatus(303);
+
     return $response->withJson($result);
 });
 
@@ -264,7 +263,7 @@ $app->post('/schedule-lesson', function (Request $request, Response $response, a
         ]);
 
         $result = ['payment' => $paymentIntent];
-    } catch (\Stripe\Exception\InvalidRequestException $e) {
+    } catch (\Stripe\Exception\ApiErrorException $e) {
         $result = [
             'error' => [
                 'code' => $e->getStripeCode(),
@@ -313,7 +312,7 @@ $app->post('/complete-lesson-payment', function (Request $request, Response $res
         ]);
 
         $result = ['payment' => $capture];
-    } catch (\Stripe\Exception\InvalidRequestException $e) {
+    } catch (\Stripe\Exception\ApiErrorException $e) {
         $result = [
             'error' => [
                 'code' => $e->getStripeCode(),
@@ -370,7 +369,7 @@ $app->post('/refund-lesson', function (Request $request, Response $response, arr
         $refund = $stripe->refunds->create($refundParams);
 
         $result = ['refund' => $refund->id];
-    } catch (\Stripe\Exception\InvalidRequestException $e) {
+    } catch (\Stripe\Exception\ApiErrorException $e) {
         $result = [
             'error' => [
                 'code' => $e->getStripeCode(),
@@ -386,7 +385,7 @@ $app->get('/refunds/{refundId}', function (Request $request, Response $response,
     $stripe = new \Stripe\StripeClient(getenv('STRIPE_SECRET_KEY'));
     try {
         $result = $stripe->refunds->retrieve($args['refundId'], []);
-    } catch (\Stripe\Exception\InvalidRequestException $e) {
+    } catch (\Stripe\Exception\ApiErrorException $e) {
         $result = [
             'error' => [
                 'code' => $e->getStripeCode(),
@@ -424,7 +423,7 @@ $app->post('/get-customer', function (Request $request, Response $response, arra
                 ]
             ];
         }
-    } catch (\Stripe\Exception\InvalidRequestException $e) {
+    } catch (\Stripe\Exception\ApiErrorException $e) {
         $result = [
             'error' => [
                 'code' => $e->getStripeCode(),
@@ -490,7 +489,7 @@ $app->post('/account-update/{customer_id}', function (Request $request, Response
                 'last4' => $paymentMethod->card->last4
             ]
         ];
-    } catch (\Stripe\Exception\InvalidRequestException $e) {
+    } catch (\Stripe\Exception\ApiErrorException $e) {
         $result = [
             'error' => [
                 'code' => $e->getStripeCode(),
@@ -568,7 +567,7 @@ $app->post('/delete-account/{customer_id}', function (Request $request, Response
             $customer = $stripe->customers->delete($args['customer_id'], []);
             $result['deleted'] = $customer->deleted;
         }
-    } catch (\Stripe\Exception\InvalidRequestException $e) {
+    } catch (\Stripe\Exception\ApiErrorException $e) {
         $result = [
             'error' => [
                 'code' => $e->getStripeCode(),
@@ -596,6 +595,48 @@ $app->post('/delete-account/{customer_id}', function (Request $request, Response
  */
 $app->get('/calculate-lesson-total', function (Request $request, Response $response, array $args) {
   // TODO: Integrate Stripe
+    $stripe = new \Stripe\StripeClient(getenv('STRIPE_SECRET_KEY'));
+    $result = [
+        'payment_total' => 0,
+        'fee_total' => 0,
+        'net_total' => 0
+    ];
+    try {
+        $time = strtotime('-36 hour');
+        function calculateTotal($stripe, &$result, $time, $startingAfter = null)
+        {
+            $limit = 100;
+            $params = [
+                'created' => ['gte' => $time],
+                'limit' => $limit,
+                'expand' => ['data.source']
+            ];
+            if ($startingAfter) {
+                $params['starting_after'] = $startingAfter;
+            }
+            $balanceTransactions = $stripe->balanceTransactions->all($params);
+            foreach ($balanceTransactions->data as $balanceTransaction) {
+                if ($balanceTransaction->source->metadata->type == 'lessons-payment') {
+                    $result['payment_total'] += $balanceTransaction->amount;
+                    $result['fee_total'] += $balanceTransaction->fee;
+                    $result['net_total'] += $balanceTransaction->net;
+                }
+            }
+            if (count($balanceTransactions->data) == $limit) {
+                $startingAfter = $balanceTransactions->data[--$limit]->id;
+                calculateTotal($stripe, $result, $time, $startingAfter);
+            }
+        }
+        calculateTotal($stripe, $result, $time);
+    } catch (\Stripe\Exception\ApiErrorException $e) {
+        $result = [
+            'error' => [
+                'code' => $e->getStripeCode(),
+                'message' => $e->getMessage()
+            ]
+        ];
+    }
+    return $response->withJson($result);
 });
 
 
@@ -634,6 +675,60 @@ $app->get('/calculate-lesson-total', function (Request $request, Response $respo
  */
 $app->get('/find-customers-with-failed-payments', function (Request $request, Response $response, array $args) {
   // TODO: Integrate Stripe
+    $stripe = new \Stripe\StripeClient(getenv('STRIPE_SECRET_KEY'));
+    $result = [];
+    try {
+        $time = strtotime('-36 hour');
+        function getFailedPayments($stripe, &$result, $time, $startingAfter = null)
+        {
+            $limit = 100;
+            $params = [
+                'created' => ['gte' => $time],
+                'limit' => $limit,
+                'expand' => ['data.latest_charge']
+            ];
+            if ($startingAfter) {
+                $params['starting_after'] = $startingAfter;
+            }
+            $paymentIntents = $stripe->paymentIntents->all($params);
+            foreach ($paymentIntents->data as $paymentIntent) {
+                if ($paymentIntent->latest_charge &&
+                    $paymentIntent->latest_charge->status == 'failed') {
+                    $result[] = [
+                        'customer' => [
+                            'id' => $paymentIntent->customer,
+                            'email' => $paymentIntent->latest_charge->billing_details->email,
+                            'name' => $paymentIntent->latest_charge->billing_details->name,
+                        ],
+                        'payment_intent' => [
+                            'created' => 1,
+                            'description' => $paymentIntent->description,
+                            'status' => $paymentIntent->latest_charge->status,
+                            'error' => $paymentIntent->last_payment_error->decline_code,
+                        ],
+                        'payment_method' => [
+                            'last4' => $paymentIntent->latest_charge->payment_method_details->card->last4,
+                            'brand' => $paymentIntent->latest_charge->payment_method_details->card->brand,
+                        ],
+                    ];
+                }
+            }
+            if (count($paymentIntents->data) == $limit) {
+                $startingAfter = $paymentIntents->data[--$limit]->id;
+                getFailedPayments($stripe, $result, $time, $startingAfter);
+            }
+        }
+
+        getFailedPayments($stripe, $result, $time);
+    } catch (\Stripe\Exception\ApiErrorException $e) {
+        $result = [
+            'error' => [
+                'code' => $e->getStripeCode(),
+                'message' => $e->getMessage()
+            ]
+        ];
+    }
+    return $response->withJson($result);
 });
 
 $app->map(['GET', 'POST', 'PUT', 'DELETE', 'PATCH'], '/{routes:.+}', function($req, $res) {
